@@ -2,142 +2,178 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>歐昇 - 尺寸換算器</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>歐昇 - 專屬鍵盤換算器</title>
     <style>
         body { 
             font-family: 'Helvetica Neue', Arial, sans-serif; 
             background-color: #f0f2f5; 
-            padding: 20px; 
+            padding: 15px; 
             text-align: center; 
             margin: 0;
+            /* 防止連按放大畫面 */
+            touch-action: manipulation; 
         }
         .container { 
             background: white; 
-            padding: 30px 20px; 
+            padding: 20px; 
             border-radius: 15px; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
             max-width: 400px; 
-            margin: 20px auto; 
+            margin: 0 auto; 
         }
-        h2 { color: #333; margin-top: 0; letter-spacing: 1px; }
-        .hint { color: #888; font-size: 14px; margin-bottom: 25px; }
+        h2 { color: #333; margin-top: 0; font-size: 22px; }
         
         .input-group { 
             display: flex; 
             align-items: center; 
             justify-content: center; 
-            gap: 15px; 
+            gap: 10px; 
             margin-bottom: 20px;
         }
         
-        input[type="number"] { 
-            width: 40%; 
+        /* 輸入框樣式 */
+        .display-box { 
+            width: 45%; 
             padding: 15px 10px; 
-            font-size: 22px; 
+            font-size: 24px; 
             text-align: center; 
             border: 2px solid #ddd; 
             border-radius: 10px; 
             background-color: #fafafa;
-            transition: all 0.3s;
+            color: #333;
+            min-height: 28px;
+            cursor: pointer;
+            transition: all 0.2s;
         }
-        input[type="number"]:focus { 
-            border-color: #007bff; 
-            background-color: #fff; 
-            outline: none; 
-            box-shadow: 0 0 8px rgba(0, 123, 255, 0.2);
+        /* 作用中(正在輸入)的輸入框加上藍色發光效果 */
+        .display-box.active {
+            border-color: #007bff;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 123, 255, 0.3);
+        }
+        /* 加上提示文字 */
+        .display-box:empty::before {
+            content: attr(data-placeholder);
+            color: #aaa;
+            font-size: 20px;
         }
         
         .multiply-sign { font-size: 24px; color: #999; font-weight: bold; }
         
-        /* 一鍵清除按鈕樣式 */
-        #clear-btn {
-            background-color: #f8f9fa;
-            color: #495057;
-            border: 1px solid #ced4da;
-            padding: 10px 20px;
-            font-size: 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            width: 100%;
-            margin-bottom: 10px;
-            transition: background-color 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-        #clear-btn:active {
-            background-color: #e2e6ea;
-            transform: scale(0.98);
-        }
-
         #result { 
-            margin-top: 20px; 
-            font-size: 28px; 
+            margin: 15px 0; 
+            font-size: 24px; 
             font-weight: bold; 
-            padding: 25px 20px; 
+            padding: 20px 10px; 
             background: #e8f4fd; 
             border-radius: 10px; 
             color: #0056b3; 
-            line-height: 1.6; 
-            min-height: 80px;
+            line-height: 1.5; 
+            min-height: 70px;
             display: flex;
             flex-direction: column;
             justify-content: center;
         }
-        .empty-text { color: #aaa; font-size: 18px; font-weight: normal; }
+
+        /* 專屬數字鍵盤網格 */
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .key {
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 12px;
+            padding: 18px 0;
+            font-size: 26px;
+            font-weight: bold;
+            color: #333;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: background-color 0.1s;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .key:active { background-color: #e2e6ea; transform: scale(0.95); }
+        
+        /* 功能鍵特別標示 */
+        .key-action { background-color: #e9ecef; font-size: 20px; }
+        .key-clear { background-color: #ffefef; color: #dc3545; border-color: #fbc2c4; grid-column: span 2; }
+        .key-next { background-color: #e2f0fb; color: #007bff; border-color: #b8daff; grid-column: span 2; }
     </style>
 </head>
 <body>
 
     <div class="container">
         <h2>歐昇 尺寸換算器</h2>
-        <div class="hint">輸入台尺自動轉公分，輸入框支援小數點</div>
         
         <div class="input-group">
-            <input type="number" id="length" placeholder="長" inputmode="decimal">
+            <div id="length" class="display-box active" data-placeholder="長度"></div>
             <span class="multiply-sign">×</span>
-            <input type="number" id="width" placeholder="寬" inputmode="decimal">
+            <div id="width" class="display-box" data-placeholder="寬度"></div>
         </div>
 
-        <!-- 一鍵清除按鈕 -->
-        <button id="clear-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
-                <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
-            </svg>
-            清除重新輸入
-        </button>
-
         <div id="result">
-            <span class="empty-text">換算結果將顯示於此</span>
+            <span style="color: #aaa; font-size: 16px; font-weight: normal;">請輸入數字自動換算</span>
+        </div>
+
+        <!-- 網頁內建數字鍵盤 -->
+        <div class="keypad">
+            <button class="key">7</button>
+            <button class="key">8</button>
+            <button class="key">9</button>
+            <button class="key key-action" id="btn-back">⌫ 退格</button>
+
+            <button class="key">4</button>
+            <button class="key">5</button>
+            <button class="key">6</button>
+            <button class="key" id="btn-dot">.</button>
+
+            <button class="key">1</button>
+            <button class="key">2</button>
+            <button class="key">3</button>
+            <button class="key">0</button>
+            
+            <button class="key key-clear" id="btn-clear">全部清除</button>
+            <button class="key key-next" id="btn-next">跳下一個 ➡</button>
         </div>
     </div>
 
     <script>
-        const lengthInput = document.getElementById('length');
-        const widthInput = document.getElementById('width');
+        const lengthBox = document.getElementById('length');
+        const widthBox = document.getElementById('width');
         const resultDiv = document.getElementById('result');
-        const clearBtn = document.getElementById('clear-btn');
+        const keys = document.querySelectorAll('.key');
+        
+        let activeBox = lengthBox; // 預設輸入長度
 
+        // 切換輸入框
+        function setActiveBox(box) {
+            lengthBox.classList.remove('active');
+            widthBox.classList.remove('active');
+            box.classList.add('active');
+            activeBox = box;
+        }
+
+        lengthBox.addEventListener('click', () => setActiveBox(lengthBox));
+        widthBox.addEventListener('click', () => setActiveBox(widthBox));
+
+        // 計算與顯示結果
         function calculate() {
-            const l = parseFloat(lengthInput.value);
-            const w = parseFloat(widthInput.value);
+            const l = parseFloat(lengthBox.innerText);
+            const w = parseFloat(widthBox.innerText);
             let resultHTML = '';
 
-            if (!isNaN(l)) {
-                resultHTML += `長: ${(l * 30.3).toFixed(1)} cm`;
-            }
-            if (!isNaN(l) && !isNaN(w)) {
-                resultHTML += `<br>`;
-            }
-            if (!isNaN(w)) {
-                resultHTML += `寬: ${(w * 30.3).toFixed(1)} cm`;
-            }
+            if (!isNaN(l)) resultHTML += `長: ${(l * 30.3).toFixed(1)} cm`;
+            if (!isNaN(l) && !isNaN(w)) resultHTML += `<br>`;
+            if (!isNaN(w)) resultHTML += `寬: ${(w * 30.3).toFixed(1)} cm`;
 
             if (resultHTML === '') {
-                resultDiv.innerHTML = '<span class="empty-text">換算結果將顯示於此</span>';
+                resultDiv.innerHTML = '<span style="color: #aaa; font-size: 16px; font-weight: normal;">請輸入數字自動換算</span>';
                 resultDiv.style.background = '#e9ecef';
             } else {
                 resultDiv.innerHTML = resultHTML;
@@ -145,16 +181,40 @@
             }
         }
 
-        // 監聽輸入即時計算
-        lengthInput.addEventListener('input', calculate);
-        widthInput.addEventListener('input', calculate);
+        // 處理鍵盤點擊
+        keys.forEach(key => {
+            key.addEventListener('click', function() {
+                const val = this.innerText;
+                let currentText = activeBox.innerText;
 
-        // 監聽清除按鈕
-        clearBtn.addEventListener('click', () => {
-            lengthInput.value = '';
-            widthInput.value = '';
-            calculate(); // 觸發清空畫面
-            lengthInput.focus(); // 清除後自動將游標跳回「長」的輸入框
+                if (this.id === 'btn-clear') {
+                    // 全部清除並跳回長度
+                    lengthBox.innerText = '';
+                    widthBox.innerText = '';
+                    setActiveBox(lengthBox);
+                } 
+                else if (this.id === 'btn-back') {
+                    // 退格鍵 (刪除最後一個字)
+                    activeBox.innerText = currentText.slice(0, -1);
+                }
+                else if (this.id === 'btn-next') {
+                    // 跳下一個 (長度跳寬度，寬度跳長度)
+                    if (activeBox === lengthBox) setActiveBox(widthBox);
+                    else setActiveBox(lengthBox);
+                }
+                else if (this.id === 'btn-dot') {
+                    // 小數點 (避免重複輸入小數點)
+                    if (!currentText.includes('.')) {
+                        activeBox.innerText = currentText === '' ? '0.' : currentText + '.';
+                    }
+                }
+                else {
+                    // 一般數字
+                    activeBox.innerText = currentText + val;
+                }
+
+                calculate(); // 每次按鍵都觸發計算
+            });
         });
     </script>
 </body>
