@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>歐昇 - 尺寸換算器</title>
+    <title>歐昇 - 尺寸換算器 (支援長x寬)</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         body { text-align: center; font-family: sans-serif; padding: 10px; background: #f4f4f4; }
@@ -14,17 +14,19 @@
             position: absolute; top: 25%; left: 25%; width: 50%; height: 50%; 
             border: 3px solid #00ff00; border-radius: 5px; pointer-events: none;
         }
-        #result { font-size: 20px; font-weight: bold; margin: 20px 0; padding: 15px; background: white; border-radius: 8px; }
+        #result { font-size: 18px; font-weight: bold; margin: 20px 0; padding: 15px; background: white; border-radius: 8px; line-height: 1.5; }
+        .cm-result { color: #d32f2f; font-size: 26px; }
+        .loading { color: #888; font-style: italic; }
     </style>
 </head>
 <body>
 
-    <h3>歐昇：台尺轉公分掃描</h3>
+    <h3>歐昇：台尺 (LxW) 轉 公分 掃描</h3>
     <div class="container">
         <video id="video" autoplay playsinline></video>
         <div class="frame"></div>
     </div>
-    <div id="result">等待對準數字...</div>
+    <div id="result" class="loading">正在初始化相機...</div>
 
     <script>
         const video = document.getElementById('video');
@@ -32,10 +34,20 @@
         let isProcessing = false;
 
         async function setupCamera() {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: 'environment' } 
-            });
-            video.srcObject = stream;
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment' } 
+                });
+                video.srcObject = stream;
+                video.addEventListener('loadeddata', () => {
+                    resultDiv.innerHTML = "等待對準數字...";
+                    resultDiv.className = ""; // 移除 loading 樣式
+                    runOCR();
+                });
+            } catch (error) {
+                resultDiv.innerHTML = "<span style='color:red;'>無法存取相機，請確認 HTTPS 與權限。</span>";
+                console.error("Camera error:", error);
+            }
         }
 
         async function runOCR() {
@@ -43,28 +55,54 @@
             isProcessing = true;
 
             const canvas = document.createElement('canvas');
-            canvas.width = 300; // 降低解析度以加速識別
-            canvas.height = 150;
-            // 只截取畫面中間的區塊進行識別 (ROI)
-            canvas.getContext('2d').drawImage(video, 100, 150, 400, 200, 0, 0, 300, 150);
+            const cw = video.videoWidth * 0.5; // ROI 寬度
+            const ch = video.videoHeight * 0.5; // ROI 高度
+            canvas.width = 400; // 降低畫布解析度以加速運算
+            canvas.height = 200;
+
+            // 截取畫面中間的區塊 (ROI)
+            canvas.getContext('2d').drawImage(
+                video, 
+                video.videoWidth * 0.25, video.videoHeight * 0.25, // 取畫面中央
+                cw, ch, 
+                0, 0, canvas.width, canvas.height
+            );
 
             try {
+                // Tesseract 識別
                 const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
-                const match = text.match(/\d+(\.\d+)?/);
+                
+                // --- 核心優化 ---
+                // 使用正則表達式尋找「長 x 寬」格式的數字（含小數）
+                // 例如捕捉： "5.31×4.95", "4.8|5", "10 X 20.5"
+                const dimensionRegex = /(\d+(\.\d+)?)\s*[xX×\|]\s*(\d+(\.\d+)?)/;
+                const match = text.match(dimensionRegex);
+
                 if (match) {
-                    const val = parseFloat(match[0]);
-                    const cm = (val * 30.3).toFixed(1);
-                    resultDiv.innerHTML = `識別: ${val} 台尺<br><span style="color:red; font-size:30px;">${cm} 公分</span>`;
+                    const lVal = parseFloat(match[1]); // 長 (第一個數字)
+                    const wVal = parseFloat(match[3]); // 寬 (第三個捕獲組)
+
+                    // 換算
+                    const lCm = (lVal * 30.3).toFixed(1);
+                    const wCm = (wVal * 30.3).toFixed(1);
+
+                    // 顯示結果
+                    resultDiv.innerHTML = `
+                        识别台尺: ${lVal} × ${wVal}<br>
+                        <span class="cm-result">${lCm} cm × ${wCm} cm</span>
+                    `;
+                } else {
+                    resultDiv.innerHTML = "等待對準數字對...<br><span style='font-size:12px;color:#888;'>請將尺寸對準綠色框線</span>";
                 }
             } catch (err) {
-                console.error(err);
+                console.error("OCR Error:", err);
             }
 
             isProcessing = false;
-            setTimeout(runOCR, 2000); // 改為每 2 秒掃描一次，避免手機過熱
+            setTimeout(runOCR, 2000); // 每 2 秒掃描一次
         }
 
-        setupCamera().then(runOCR);
+        setupCamera();
     </script>
 </body>
 </html>
