@@ -3,49 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>歐昇 - 尺寸換算器 (支援長x寬)</title>
+    <title>歐昇 - 台尺尺寸掃描器 (分數格式)</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
-        body { text-align: center; font-family: sans-serif; padding: 10px; background: #f4f4f4; }
-        .container { position: relative; display: inline-block; }
-        #video { width: 100%; max-width: 500px; border-radius: 10px; }
-        /* 視覺取景框 */
-        .frame { 
-            position: absolute; top: 25%; left: 25%; width: 50%; height: 50%; 
-            border: 3px solid #00ff00; border-radius: 5px; pointer-events: none;
+        body { text-align: center; font-family: sans-serif; padding: 10px; background: #f4f4f4; margin: 0; }
+        h3 { margin-top: 10px; }
+        .container { position: relative; display: inline-block; width: 100%; max-width: 500px; }
+        #video { width: 100%; border-radius: 10px; }
+        
+        /* 半透明遮罩，只露出取景框 */
+        .mask-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.4); border-radius: 10px; pointer-events: none;
         }
-        #result { font-size: 18px; font-weight: bold; margin: 20px 0; padding: 15px; background: white; border-radius: 8px; line-height: 1.5; }
-        .cm-result { color: #d32f2f; font-size: 26px; }
-        .loading { color: #888; font-style: italic; }
+        /* 視覺取景框 (更大，且包含上下區域) */
+        .frame { 
+            position: absolute; 
+            top: 15%; left: 15%; width: 70%; height: 70%; 
+            border: 4px solid #00ff00; border-radius: 10px; 
+            box-shadow: 0 0 10px #00ff00; /* 加點光暈讓師傅更好對準 */
+            background: transparent; /* 露出底下的相機 */
+        }
+
+        #result { font-size: 18px; font-weight: bold; margin: 20px 0; padding: 20px; background: white; border-radius: 8px; line-height: 1.6; }
+        .cm-result { color: #d32f2f; font-size: 28px; font-weight: 900; }
+        .taiwan-val { font-size: 20px; color: #333; }
+        .loading-text { color: #888; font-style: italic; }
     </style>
 </head>
 <body>
 
-    <h3>歐昇：台尺 (LxW) 轉 公分 掃描</h3>
+    <h3>歐昇：台尺轉公分掃描</h3>
+    <p style="font-size:14px;color:#666;margin:0 0 10px 0;">請將包含上方和下方數字的尺寸對準綠色框</p>
     <div class="container">
         <video id="video" autoplay playsinline></video>
+        <div class="mask-overlay"></div> <!-- 加上遮罩 -->
         <div class="frame"></div>
     </div>
-    <div id="result" class="loading">正在初始化相機...</div>
+    <div id="result" class="loading-text">正在初始化相機...</div>
 
     <script>
         const video = document.getElementById('video');
+        const frame = document.querySelector('.frame');
         const resultDiv = document.getElementById('result');
         let isProcessing = false;
 
         async function setupCamera() {
             try {
+                // 增加優先選擇環境攝像頭的設定
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'environment' } 
+                    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
                 });
                 video.srcObject = stream;
                 video.addEventListener('loadeddata', () => {
-                    resultDiv.innerHTML = "等待對準數字...";
+                    resultDiv.innerHTML = "等待對準數字對...";
                     resultDiv.className = ""; // 移除 loading 樣式
                     runOCR();
                 });
             } catch (error) {
-                resultDiv.innerHTML = "<span style='color:red;'>無法存取相機，請確認 HTTPS 與權限。</span>";
+                resultDiv.innerHTML = "<span style='color:red;'>無法存取相機。<br>請確認使用 HTTPS 且已允許權限。</span>";
                 console.error("Camera error:", error);
             }
         }
@@ -55,44 +71,59 @@
             isProcessing = true;
 
             const canvas = document.createElement('canvas');
-            const cw = video.videoWidth * 0.5; // ROI 寬度
-            const ch = video.videoHeight * 0.5; // ROI 高度
-            canvas.width = 400; // 降低畫布解析度以加速運算
-            canvas.height = 200;
+            const videoWidth = video.videoWidth;
+            const videoHeight = video.videoHeight;
+            const offsetWidth = video.offsetWidth;
+            const offsetHeight = video.offsetHeight;
+
+            // 計算精確的比例
+            const scaleX = videoWidth / offsetWidth;
+            const scaleY = videoHeight / offsetHeight;
+
+            // 根據 .frame 在 CSS 中的位置和比例，精確截取相機流
+            const ROI_Width = frame.offsetWidth * scaleX;
+            const ROI_Height = frame.offsetHeight * scaleY;
+            const sx = frame.offsetLeft * scaleX;
+            const sy = frame.offsetTop * scaleY;
+
+            canvas.width = 400; // 降低解析度以加速運算
+            canvas.height = Math.round(canvas.width * (frame.offsetHeight / frame.offsetWidth));
 
             // 截取畫面中間的區塊 (ROI)
-            canvas.getContext('2d').drawImage(
-                video, 
-                video.videoWidth * 0.25, video.videoHeight * 0.25, // 取畫面中央
-                cw, ch, 
-                0, 0, canvas.width, canvas.height
-            );
+            canvas.getContext('2d').drawImage(video, sx, sy, ROI_Width, ROI_Height, 0, 0, canvas.width, canvas.height);
 
             try {
-                // Tesseract 識別
-                const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
+                // Tesseract 識別 (專注於數字)
+                const { data: { text } } = await Tesseract.recognize(canvas, 'eng', { logger: m => {} });
                 
                 // --- 核心優化 ---
-                // 使用正則表達式尋找「長 x 寬」格式的數字（含小數）
-                // 例如捕捉： "5.31×4.95", "4.8|5", "10 X 20.5"
-                const dimensionRegex = /(\d+(\.\d+)?)\s*[xX×\|]\s*(\d+(\.\d+)?)/;
-                const match = text.match(dimensionRegex);
+                // 使用全域數字匹配正則表達式，它會抓取所有數字 (含小數)
+                // 例如捕捉標籤上的： "5.31 共用 4.95" 中的 "5.31" 和 "4.95"
+                const numberRegex = /\d+(\.\d+)?/g;
+                const matches = text.match(numberRegex);
 
-                if (match) {
-                    const lVal = parseFloat(match[1]); // 長 (第一個數字)
-                    const wVal = parseFloat(match[3]); // 寬 (第三個捕獲組)
+                if (matches && matches.length >= 2) {
+                    // 如果至少抓到兩個數字，取第一個為長，第二個為寬
+                    const lVal = parseFloat(matches[0]); // 長
+                    const wVal = parseFloat(matches[1]); // 寬
 
-                    // 換算
-                    const lCm = (lVal * 30.3).toFixed(1);
-                    const wCm = (wVal * 30.3).toFixed(1);
+                    // 過濾一些明顯錯誤的數字 (例如小於 0.1 或大於 100)
+                    if (lVal > 0.1 && wVal > 0.1 && lVal < 100 && wVal < 100) {
+                        // 換算
+                        const lCm = (lVal * 30.3).toFixed(1);
+                        const wCm = (wVal * 30.3).toFixed(1);
 
-                    // 顯示結果
-                    resultDiv.innerHTML = `
-                        识别台尺: ${lVal} × ${wVal}<br>
-                        <span class="cm-result">${lCm} cm × ${wCm} cm</span>
-                    `;
+                        // 顯示結果
+                        resultDiv.innerHTML = `
+                            <span class="taiwan-val">识别台尺: ${lVal} × ${wVal}</span><br>
+                            <span class="cm-result">${lCm} cm × ${wCm} cm</span>
+                        `;
+                    } else {
+                        // 如果數字看起來不對，就繼續等待
+                        resultDiv.innerHTML = "等待對準尺寸區域...<br><span style='font-size:12px;color:#888;'>請確保框內數字清晰</span>";
+                    }
                 } else {
-                    resultDiv.innerHTML = "等待對準數字對...<br><span style='font-size:12px;color:#888;'>請將尺寸對準綠色框線</span>";
+                    resultDiv.innerHTML = "等待對準尺寸區域...<br><span style='font-size:12px;color:#888;'>請將尺寸上下數字對準綠色框</span>";
                 }
             } catch (err) {
                 console.error("OCR Error:", err);
