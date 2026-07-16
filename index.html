@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>歐昇 - 尺寸換算器</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        body { text-align: center; font-family: sans-serif; padding: 10px; background: #f4f4f4; }
+        .container { position: relative; display: inline-block; }
+        #video { width: 100%; max-width: 500px; border-radius: 10px; }
+        /* 視覺取景框 */
+        .frame { 
+            position: absolute; top: 25%; left: 25%; width: 50%; height: 50%; 
+            border: 3px solid #00ff00; border-radius: 5px; pointer-events: none;
+        }
+        #result { font-size: 20px; font-weight: bold; margin: 20px 0; padding: 15px; background: white; border-radius: 8px; }
+    </style>
+</head>
+<body>
+
+    <h3>歐昇：台尺轉公分掃描</h3>
+    <div class="container">
+        <video id="video" autoplay playsinline></video>
+        <div class="frame"></div>
+    </div>
+    <div id="result">等待對準數字...</div>
+
+    <script>
+        const video = document.getElementById('video');
+        const resultDiv = document.getElementById('result');
+        let isProcessing = false;
+
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'environment' } 
+            });
+            video.srcObject = stream;
+        }
+
+        async function runOCR() {
+            if (isProcessing) return;
+            isProcessing = true;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 300; // 降低解析度以加速識別
+            canvas.height = 150;
+            // 只截取畫面中間的區塊進行識別 (ROI)
+            canvas.getContext('2d').drawImage(video, 100, 150, 400, 200, 0, 0, 300, 150);
+
+            try {
+                const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
+                const match = text.match(/\d+(\.\d+)?/);
+                if (match) {
+                    const val = parseFloat(match[0]);
+                    const cm = (val * 30.3).toFixed(1);
+                    resultDiv.innerHTML = `識別: ${val} 台尺<br><span style="color:red; font-size:30px;">${cm} 公分</span>`;
+                }
+            } catch (err) {
+                console.error(err);
+            }
+
+            isProcessing = false;
+            setTimeout(runOCR, 2000); // 改為每 2 秒掃描一次，避免手機過熱
+        }
+
+        setupCamera().then(runOCR);
+    </script>
+</body>
+</html>
