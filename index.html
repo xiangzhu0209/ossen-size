@@ -3,146 +3,159 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>歐昇 - 終極尺寸掃描器</title>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <title>歐昇 - 尺寸換算器</title>
     <style>
-        body { text-align: center; font-family: sans-serif; padding: 10px; background: #f4f4f4; margin: 0; }
-        h3 { margin-top: 10px; color: #333; }
-        .container { position: relative; display: inline-block; width: 100%; max-width: 500px; }
-        #video { width: 100%; border-radius: 10px; display: block; object-fit: cover; }
-        
-        .mask-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.4); border-radius: 10px; pointer-events: none;
+        body { 
+            font-family: 'Helvetica Neue', Arial, sans-serif; 
+            background-color: #f0f2f5; 
+            padding: 20px; 
+            text-align: center; 
+            margin: 0;
         }
-        .frame { 
-            position: absolute; 
-            top: 15%; left: 15%; width: 70%; height: 60%; 
-            border: 3px solid #00ff00; border-radius: 8px; 
-            box-shadow: 0 0 10px rgba(0, 255, 0, 0.8); 
-            background: transparent; 
+        .container { 
+            background: white; 
+            padding: 30px 20px; 
+            border-radius: 15px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
+            max-width: 400px; 
+            margin: 20px auto; 
+        }
+        h2 { color: #333; margin-top: 0; letter-spacing: 1px; }
+        .hint { color: #888; font-size: 14px; margin-bottom: 25px; }
+        
+        .input-group { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 15px; 
+            margin-bottom: 20px;
+        }
+        
+        input[type="number"] { 
+            width: 40%; 
+            padding: 15px 10px; 
+            font-size: 22px; 
+            text-align: center; 
+            border: 2px solid #ddd; 
+            border-radius: 10px; 
+            background-color: #fafafa;
+            transition: all 0.3s;
+        }
+        input[type="number"]:focus { 
+            border-color: #007bff; 
+            background-color: #fff; 
+            outline: none; 
+            box-shadow: 0 0 8px rgba(0, 123, 255, 0.2);
+        }
+        
+        .multiply-sign { font-size: 24px; color: #999; font-weight: bold; }
+        
+        /* 一鍵清除按鈕樣式 */
+        #clear-btn {
+            background-color: #f8f9fa;
+            color: #495057;
+            border: 1px solid #ced4da;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 10px;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        #clear-btn:active {
+            background-color: #e2e6ea;
+            transform: scale(0.98);
         }
 
-        #scan-btn {
-            display: block; width: 80%; max-width: 300px; margin: 20px auto; 
-            padding: 15px; font-size: 20px; font-weight: bold; 
-            background-color: #007bff; color: white; border: none; 
-            border-radius: 50px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        #result { 
+            margin-top: 20px; 
+            font-size: 28px; 
+            font-weight: bold; 
+            padding: 25px 20px; 
+            background: #e8f4fd; 
+            border-radius: 10px; 
+            color: #0056b3; 
+            line-height: 1.6; 
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
-        #scan-btn:active { background-color: #0056b3; transform: scale(0.98); }
-        #scan-btn:disabled { background-color: #ccc; cursor: not-allowed; }
-
-        #result { font-size: 18px; font-weight: bold; margin: 15px 0; padding: 20px; background: white; border-radius: 8px; line-height: 1.6; }
-        .cm-result { color: #d32f2f; font-size: 28px; font-weight: 900; }
-        .taiwan-val { font-size: 20px; color: #333; }
-        
-        #debug-text { font-size: 13px; color: #555; margin-top: 10px; word-break: break-all; padding: 10px; background: #e9ecef; border-radius: 5px; }
+        .empty-text { color: #aaa; font-size: 18px; font-weight: normal; }
     </style>
 </head>
 <body>
 
-    <h3>歐昇：台尺轉公分 (精準手動版)</h3>
-    <p style="font-size:14px;color:#666;margin:0 0 10px 0;">請將包含上下的尺寸數字對準綠色框</p>
-    
     <div class="container">
-        <video id="video" autoplay playsinline></video>
-        <div class="mask-overlay"></div>
-        <div class="frame" id="scan-frame"></div>
+        <h2>歐昇 尺寸換算器</h2>
+        <div class="hint">輸入台尺自動轉公分，輸入框支援小數點</div>
+        
+        <div class="input-group">
+            <input type="number" id="length" placeholder="長" inputmode="decimal">
+            <span class="multiply-sign">×</span>
+            <input type="number" id="width" placeholder="寬" inputmode="decimal">
+        </div>
+
+        <!-- 一鍵清除按鈕 -->
+        <button id="clear-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+                <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+            </svg>
+            清除重新輸入
+        </button>
+
+        <div id="result">
+            <span class="empty-text">換算結果將顯示於此</span>
+        </div>
     </div>
 
-    <button id="scan-btn" disabled>相機準備中...</button>
-    <div id="result">等待操作...</div>
-    <div id="debug-text">AI 原始文字將顯示於此</div>
-
     <script>
-        const video = document.getElementById('video');
-        const frame = document.getElementById('scan-frame');
+        const lengthInput = document.getElementById('length');
+        const widthInput = document.getElementById('width');
         const resultDiv = document.getElementById('result');
-        const scanBtn = document.getElementById('scan-btn');
-        const debugText = document.getElementById('debug-text');
+        const clearBtn = document.getElementById('clear-btn');
 
-        async function setupCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } 
-                });
-                video.srcObject = stream;
-                video.addEventListener('loadeddata', () => {
-                    scanBtn.innerText = "📸 點擊掃描尺寸";
-                    scanBtn.disabled = false;
-                });
-            } catch (error) {
-                resultDiv.innerHTML = "<span style='color:red;'>無法存取相機，請確認權限。</span>";
+        function calculate() {
+            const l = parseFloat(lengthInput.value);
+            const w = parseFloat(widthInput.value);
+            let resultHTML = '';
+
+            if (!isNaN(l)) {
+                resultHTML += `長: ${(l * 30.3).toFixed(1)} cm`;
+            }
+            if (!isNaN(l) && !isNaN(w)) {
+                resultHTML += `<br>`;
+            }
+            if (!isNaN(w)) {
+                resultHTML += `寬: ${(w * 30.3).toFixed(1)} cm`;
+            }
+
+            if (resultHTML === '') {
+                resultDiv.innerHTML = '<span class="empty-text">換算結果將顯示於此</span>';
+                resultDiv.style.background = '#e9ecef';
+            } else {
+                resultDiv.innerHTML = resultHTML;
+                resultDiv.style.background = '#e8f4fd';
             }
         }
 
-        scanBtn.addEventListener('click', async () => {
-            scanBtn.disabled = true;
-            scanBtn.innerText = "⏳ 辨識中...";
-            resultDiv.innerHTML = "正在分析框內影像...";
-            debugText.innerText = "讀取中...";
+        // 監聽輸入即時計算
+        lengthInput.addEventListener('input', calculate);
+        widthInput.addEventListener('input', calculate);
 
-            const canvas = document.createElement('canvas');
-            
-            // --- 重點修復：使用絕對螢幕座標來計算截圖區域，確保不跑位 ---
-            const videoRect = video.getBoundingClientRect();
-            const frameRect = frame.getBoundingClientRect();
-
-            const scaleX = video.videoWidth / videoRect.width;
-            const scaleY = video.videoHeight / videoRect.height;
-
-            const sx = (frameRect.left - videoRect.left) * scaleX;
-            const sy = (frameRect.top - videoRect.top) * scaleY;
-            const sWidth = frameRect.width * scaleX;
-            const sHeight = frameRect.height * scaleY;
-
-            // 設定畫布與截取區域等比例
-            canvas.width = sWidth;
-            canvas.height = sHeight;
-
-            const ctx = canvas.getContext('2d');
-            // 只保留灰階，拿掉過高的對比度，避免破壞數字形狀
-            ctx.filter = 'grayscale(100%)';
-            ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
-
-            try {
-                const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
-                debugText.innerText = `[AI 看到]: ${text.replace(/\n/g, '  ')}`;
-                
-                // --- 重點修復：暴力抓字法 ---
-                // 不管旁邊黏什麼鬼東西，只要有連續數字或小數點就抓出來
-                const numberRegex = /\d+(?:\.\d+)?/g;
-                let matches = text.match(numberRegex);
-
-                if (matches) {
-                    // 過濾掉不合理的尺寸 (只抓 1.0 到 50.0 之間的數字，避免抓到條碼)
-                    matches = matches.map(parseFloat).filter(val => val >= 1.0 && val <= 50.0);
-                }
-
-                if (matches && matches.length >= 2) {
-                    const lVal = matches[0];
-                    const wVal = matches[1];
-
-                    const lCm = (lVal * 30.3).toFixed(1);
-                    const wCm = (wVal * 30.3).toFixed(1);
-
-                    resultDiv.innerHTML = `
-                        <span class="taiwan-val">识别台尺: ${lVal} × ${wVal}</span><br>
-                        <span class="cm-result">${lCm} cm × ${wCm} cm</span>
-                    `;
-                } else {
-                    resultDiv.innerHTML = "<span style='color:red;'>無法確認尺寸</span><br><span style='font-size:14px;color:#666;'>請對準並確保框內數字清晰</span>";
-                }
-            } catch (err) {
-                console.error(err);
-                resultDiv.innerHTML = "辨識發生錯誤，請重試。";
-            }
-
-            scanBtn.innerText = "📸 點擊掃描尺寸";
-            scanBtn.disabled = false;
+        // 監聽清除按鈕
+        clearBtn.addEventListener('click', () => {
+            lengthInput.value = '';
+            widthInput.value = '';
+            calculate(); // 觸發清空畫面
+            lengthInput.focus(); // 清除後自動將游標跳回「長」的輸入框
         });
-
-        setupCamera();
     </script>
 </body>
 </html>
