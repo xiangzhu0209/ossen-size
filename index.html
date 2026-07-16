@@ -3,27 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>歐昇 - 精準尺寸掃描器</title>
+    <title>歐昇 - 終極尺寸掃描器</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         body { text-align: center; font-family: sans-serif; padding: 10px; background: #f4f4f4; margin: 0; }
         h3 { margin-top: 10px; color: #333; }
         .container { position: relative; display: inline-block; width: 100%; max-width: 500px; }
-        #video { width: 100%; border-radius: 10px; display: block; }
+        #video { width: 100%; border-radius: 10px; display: block; object-fit: cover; }
         
         .mask-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.5); border-radius: 10px; pointer-events: none;
+            background: rgba(0, 0, 0, 0.4); border-radius: 10px; pointer-events: none;
         }
         .frame { 
             position: absolute; 
-            top: 20%; left: 20%; width: 60%; height: 60%; 
+            top: 15%; left: 15%; width: 70%; height: 60%; 
             border: 3px solid #00ff00; border-radius: 8px; 
-            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5); 
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.8); 
             background: transparent; 
         }
 
-        /* 新增：手動掃描按鈕 */
         #scan-btn {
             display: block; width: 80%; max-width: 300px; margin: 20px auto; 
             padding: 15px; font-size: 20px; font-weight: bold; 
@@ -37,28 +36,27 @@
         .cm-result { color: #d32f2f; font-size: 28px; font-weight: 900; }
         .taiwan-val { font-size: 20px; color: #333; }
         
-        /* 新增：除錯文字，讓你知道 AI 到底看到了什麼 */
-        #debug-text { font-size: 12px; color: #888; margin-top: 10px; word-break: break-all; padding: 0 20px; }
+        #debug-text { font-size: 13px; color: #555; margin-top: 10px; word-break: break-all; padding: 10px; background: #e9ecef; border-radius: 5px; }
     </style>
 </head>
 <body>
 
-    <h3>歐昇：台尺轉公分 (手動精準版)</h3>
-    <p style="font-size:14px;color:#666;margin:0 0 10px 0;">請等待相機對焦清晰後，再按下掃描</p>
+    <h3>歐昇：台尺轉公分 (精準手動版)</h3>
+    <p style="font-size:14px;color:#666;margin:0 0 10px 0;">請將包含上下的尺寸數字對準綠色框</p>
     
     <div class="container">
         <video id="video" autoplay playsinline></video>
         <div class="mask-overlay"></div>
-        <div class="frame"></div>
+        <div class="frame" id="scan-frame"></div>
     </div>
 
     <button id="scan-btn" disabled>相機準備中...</button>
     <div id="result">等待操作...</div>
-    <div id="debug-text">AI 原始判讀結果會顯示在這裡</div>
+    <div id="debug-text">AI 原始文字將顯示於此</div>
 
     <script>
         const video = document.getElementById('video');
-        const frame = document.querySelector('.frame');
+        const frame = document.getElementById('scan-frame');
         const resultDiv = document.getElementById('result');
         const scanBtn = document.getElementById('scan-btn');
         const debugText = document.getElementById('debug-text');
@@ -81,38 +79,44 @@
         scanBtn.addEventListener('click', async () => {
             scanBtn.disabled = true;
             scanBtn.innerText = "⏳ 辨識中...";
-            resultDiv.innerHTML = "正在分析影像...";
-            debugText.innerText = "";
+            resultDiv.innerHTML = "正在分析框內影像...";
+            debugText.innerText = "讀取中...";
 
             const canvas = document.createElement('canvas');
-            const scaleX = video.videoWidth / video.offsetWidth;
-            const scaleY = video.videoHeight / video.offsetHeight;
+            
+            // --- 重點修復：使用絕對螢幕座標來計算截圖區域，確保不跑位 ---
+            const videoRect = video.getBoundingClientRect();
+            const frameRect = frame.getBoundingClientRect();
 
-            const ROI_Width = frame.offsetWidth * scaleX;
-            const ROI_Height = frame.offsetHeight * scaleY;
-            const sx = frame.offsetLeft * scaleX;
-            const sy = frame.offsetTop * scaleY;
+            const scaleX = video.videoWidth / videoRect.width;
+            const scaleY = video.videoHeight / videoRect.height;
 
-            canvas.width = 600; // 提高解析度讓數字更清楚
-            canvas.height = Math.round(canvas.width * (frame.offsetHeight / frame.offsetWidth));
+            const sx = (frameRect.left - videoRect.left) * scaleX;
+            const sy = (frameRect.top - videoRect.top) * scaleY;
+            const sWidth = frameRect.width * scaleX;
+            const sHeight = frameRect.height * scaleY;
+
+            // 設定畫布與截取區域等比例
+            canvas.width = sWidth;
+            canvas.height = sHeight;
 
             const ctx = canvas.getContext('2d');
-            
-            // 加入影像濾鏡：增加對比度、轉灰階，大幅降低塑膠反光干擾
-            ctx.filter = 'grayscale(100%) contrast(250%)';
-            ctx.drawImage(video, sx, sy, ROI_Width, ROI_Height, 0, 0, canvas.width, canvas.height);
+            // 只保留灰階，拿掉過高的對比度，避免破壞數字形狀
+            ctx.filter = 'grayscale(100%)';
+            ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
 
             try {
                 const { data: { text } } = await Tesseract.recognize(canvas, 'eng');
-                debugText.innerText = `AI 看到的原始文字：[ ${text.replace(/\n/g, ' ')} ]`;
+                debugText.innerText = `[AI 看到]: ${text.replace(/\n/g, '  ')}`;
                 
-                // 嚴格抓取帶有小數點的數字，或者1到2位數的整數
-                const numberRegex = /\b\d{1,2}(\.\d{1,2})?\b/g;
+                // --- 重點修復：暴力抓字法 ---
+                // 不管旁邊黏什麼鬼東西，只要有連續數字或小數點就抓出來
+                const numberRegex = /\d+(?:\.\d+)?/g;
                 let matches = text.match(numberRegex);
 
                 if (matches) {
-                    // 過濾掉不合理的尺寸 (例如小於 1 尺或大於 30 尺的極端值)
-                    matches = matches.map(parseFloat).filter(val => val >= 1.0 && val <= 30.0);
+                    // 過濾掉不合理的尺寸 (只抓 1.0 到 50.0 之間的數字，避免抓到條碼)
+                    matches = matches.map(parseFloat).filter(val => val >= 1.0 && val <= 50.0);
                 }
 
                 if (matches && matches.length >= 2) {
@@ -127,7 +131,7 @@
                         <span class="cm-result">${lCm} cm × ${wCm} cm</span>
                     `;
                 } else {
-                    resultDiv.innerHTML = "<span style='color:red;'>無法確認尺寸</span><br><span style='font-size:14px;color:#666;'>請避開反光，確保數字清晰且在框內</span>";
+                    resultDiv.innerHTML = "<span style='color:red;'>無法確認尺寸</span><br><span style='font-size:14px;color:#666;'>請對準並確保框內數字清晰</span>";
                 }
             } catch (err) {
                 console.error(err);
